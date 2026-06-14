@@ -99,7 +99,7 @@
     </div>
     <div class="vol-row">
       <span>🔈</span>
-      <input type="range" id="vol" min="0" max="100" value="100">
+      <input type="range" id="vol" min="0" max="100" value="80">
       <span>🔊</span>
     </div>
   </div>
@@ -169,41 +169,13 @@ let tracks=[];           // {id,name,blob}
 let order=[];            // index de lecture
 let pos=0;               // position dans order
 let curUrl=null;
-let musicVol=1.0;
+let musicVol=0.8;
 let ducked=false;
 const player=document.getElementById('player');
 
-/* ---------- Moteur audio (amplification du volume) ---------- */
-const MUSIC_BOOST=2.2;   // amplification de la musique à 100%
-const MIC_BOOST=3.0;     // amplification de la voix (micro)
-let audioCtx,master,musicGain,musicSource;
-function ensureCtx(){
-  if(!audioCtx){
-    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-    master=audioCtx.createDynamicsCompressor();   // limiteur anti-saturation
-    master.threshold.value=-4; master.knee.value=6; master.ratio.value=10;
-    master.attack.value=0.003; master.release.value=0.25;
-    master.connect(audioCtx.destination);
-  }
-  if(audioCtx.state==='suspended')audioCtx.resume();
-}
-function ensureMusicChain(){
-  ensureCtx();
-  if(!musicSource){
-    try{
-      musicSource=audioCtx.createMediaElementSource(player);
-      musicGain=audioCtx.createGain();
-      musicSource.connect(musicGain); musicGain.connect(master);
-      player.volume=1.0;
-    }catch(e){}
-  }
-  applyVol();
-}
-function applyVol(){
-  if(musicGain){ musicGain.gain.value=(ducked?0.08:1)*musicVol*MUSIC_BOOST; player.volume=1.0; }
-  else { player.volume=Math.min(1,(ducked?0.12:1)*musicVol); }
-}
-function setDucked(b){ducked=b; applyVol();}
+/* ---------- Volume musique (simple et fiable) ---------- */
+function applyVol(){ player.volume = Math.min(1, (ducked?0.12:1)*musicVol); }
+function setDucked(b){ ducked=b; applyVol(); }
 function buildOrder(){
   order=tracks.map((_,i)=>i);
   if(document.getElementById('shuffle').checked){
@@ -238,7 +210,7 @@ player.addEventListener('pause',updateNP);
 
 document.getElementById('playBtn').onclick=()=>{
   if(!tracks.length){document.getElementById('addBtn').click();return;}
-  if(player.paused){ if(!player.src)loadCurrent(false); ensureMusicChain(); player.play().catch(()=>{}); }
+  if(player.paused){ if(!player.src)loadCurrent(false); player.play().catch(()=>{}); }
   else player.pause();
 };
 document.getElementById('nextBtn').onclick=next;
@@ -285,14 +257,15 @@ function renderTracks(){
 }
 
 /* ---------- Micro (push-to-talk) ---------- */
-let micStream,micSource,micGain;
+let audioCtx,micStream,micSource,micGain;
 async function ensureMic(){
-  ensureCtx();
+  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')await audioCtx.resume();
   if(!micStream){
     micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
     micSource=audioCtx.createMediaStreamSource(micStream);
     micGain=audioCtx.createGain(); micGain.gain.value=0;
-    micSource.connect(micGain); micGain.connect(master);
+    micSource.connect(micGain); micGain.connect(audioCtx.destination);
   }
 }
 const talkBtn=document.getElementById('talkBtn'), talkLabel=document.getElementById('talkLabel');
@@ -300,7 +273,7 @@ let talking=false;
 async function startTalk(){
   if(talking)return; talking=true;
   talkBtn.classList.add('on'); talkLabel.textContent='EN DIRECT — PARLEZ';
-  try{ await ensureMic(); setDucked(true); micGain.gain.value=MIC_BOOST; }
+  try{ await ensureMic(); setDucked(true); micGain.gain.value=1.0; }
   catch(err){ talking=false; talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
     alert('Micro non autorisé. Ouvrez la page via un lien https et autorisez le micro dans Safari.'); }
 }
@@ -319,8 +292,8 @@ talkBtn.addEventListener('pointerleave',stopTalk);
 function chime(){
   return new Promise(res=>{
     try{
-      ensureCtx();
-      const c=audioCtx, dest=master||c.destination;
+      if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      const c=audioCtx, dest=c.destination;
       const notes=[[880,0],[660,.25]]; let done=0;
       notes.forEach(([f,t])=>{
         const o=c.createOscillator(),g=c.createGain();
@@ -328,7 +301,7 @@ function chime(){
         o.connect(g); g.connect(dest);
         const s=c.currentTime+t;
         g.gain.setValueAtTime(0,s);
-        g.gain.linearRampToValueAtTime(.8,s+.03);
+        g.gain.linearRampToValueAtTime(.5,s+.03);
         g.gain.exponentialRampToValueAtTime(.001,s+.45);
         o.start(s); o.stop(s+.5);
         o.onended=()=>{if(++done===notes.length)res();};
@@ -350,7 +323,6 @@ function speak(text){
   });
 }
 async function announce(text){
-  ensureCtx();
   const wasPlaying=!player.paused;
   if(wasPlaying)player.pause();          // musique en pause → voix bien plus forte
   await chime();
