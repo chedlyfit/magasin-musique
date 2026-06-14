@@ -18,7 +18,10 @@ automatique + micro « parler »** par-dessus la musique.
    - soit télécharge le ZIP du dépôt (bouton vert **Code → Download ZIP**) et
      décompresse-le, par ex. dans `C:\magasin-musique`,
    - soit `git clone <lien du dépôt>`.
-3. **Mettre ta musique** : copie tes fichiers `.mp3` dans le dossier **`music`**.
+3. **Mettre la musique** : soit double-clique **`TELECHARGER-MUSIQUE.bat`** pour
+   obtenir **13 h de musique entraînante libre de droits** (gratuite, légale en
+   magasin) ; soit copie tes propres `.mp3` dans le dossier **`music`** (ou les
+   deux).
 4. **Démarrer** : double-clique sur **`DEMARRER-WINDOWS.bat`**.
    - La 1re fois, Windows demande d'**autoriser l'accès réseau** → clique
      **Autoriser**.
