@@ -11,45 +11,55 @@ const ROOT = __dirname;
 const MUSIC_DIR = path.join(ROOT, 'music');
 const PORT = 8443;
 
-// --- Trouver l'adresse IP locale du PC (réseau Wi-Fi) ---
-function lanIP() {
+// --- Trouver les adresses IP locales du PC ---
+// On classe pour proposer en priorité l'adresse Wi-Fi habituelle (192.168.x.x)
+// et reléguer les adaptateurs virtuels (Hyper-V / Docker / VPN : 172.16-31.x, etc.)
+function score(a) {
+  if (a.startsWith('192.168.')) return 0;                 // Wi-Fi maison/magasin typique
+  if (/^10\./.test(a)) return 1;                          // certains routeurs
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(a)) return 3;     // souvent virtuel (Hyper-V/Docker)
+  return 2;
+}
+function lanIPs() {
   const ifs = os.networkInterfaces();
+  const out = [];
   for (const name of Object.keys(ifs)) {
     for (const i of ifs[name]) {
-      if (i.family === 'IPv4' && !i.internal) return i.address;
+      if (i.family === 'IPv4' && !i.internal) out.push({ name, addr: i.address });
     }
   }
-  return '127.0.0.1';
+  out.sort((a, b) => score(a.addr) - score(b.addr));
+  return out;
 }
-const IP = lanIP();
+const ALL = lanIPs();
+const IP = (ALL[0] && ALL[0].addr) || '127.0.0.1';
 
-// --- Générer un certificat local (1re fois, ou si l'IP a changé) ---
+// --- Générer un certificat local (1re fois, ou si les adresses ont changé) ---
 const CERT = path.join(ROOT, 'cert.pem');
 const KEY = path.join(ROOT, 'key.pem');
 const IP_MARK = path.join(ROOT, '.cert-ip');
 function ensureCert() {
-  const prevIP = fs.existsSync(IP_MARK) ? fs.readFileSync(IP_MARK, 'utf8').trim() : '';
-  if (fs.existsSync(CERT) && fs.existsSync(KEY) && prevIP === IP) return;
+  const sig = ALL.map(x => x.addr).sort().join(',');
+  const prev = fs.existsSync(IP_MARK) ? fs.readFileSync(IP_MARK, 'utf8').trim() : '';
+  if (fs.existsSync(CERT) && fs.existsSync(KEY) && prev === sig) return;
   const selfsigned = require('selfsigned');
+  const altNames = [
+    { type: 2, value: 'localhost' },
+    { type: 7, ip: '127.0.0.1' },
+  ];
+  for (const x of ALL) altNames.push({ type: 7, ip: x.addr }); // toutes les IP du PC
   const pems = selfsigned.generate([{ name: 'commonName', value: IP }], {
-    days: 3650,
-    keySize: 2048,
-    algorithm: 'sha256',
+    days: 3650, keySize: 2048, algorithm: 'sha256',
     extensions: [
       { name: 'basicConstraints', cA: true },
-      { name: 'subjectAltName', altNames: [
-        { type: 2, value: 'localhost' },
-        { type: 7, ip: '127.0.0.1' },
-        { type: 7, ip: IP },
-      ]},
+      { name: 'subjectAltName', altNames },
     ],
   });
   fs.writeFileSync(KEY, pems.private);
   fs.writeFileSync(CERT, pems.cert);
-  // Copie .crt à installer sur l'iPad (Safari propose l'installation du profil)
   fs.writeFileSync(path.join(ROOT, 'iPad-certificat.crt'), pems.cert);
-  fs.writeFileSync(IP_MARK, IP);
-  console.log('Certificat (re)généré pour ' + IP);
+  fs.writeFileSync(IP_MARK, sig);
+  console.log('Certificat (re)généré.');
 }
 ensureCert();
 
@@ -118,10 +128,24 @@ https.createServer({ key: fs.readFileSync(KEY), cert: fs.readFileSync(CERT) }, h
     console.log('=========================================================');
     console.log('  🎵  Musique Magasin — serveur local démarré');
     console.log('');
-    console.log('  Sur l\'iPad, ouvre dans Safari :');
-    console.log('      https://' + IP + ':' + PORT);
+    console.log('  Sur l\'iPad (Safari), tape l\'adresse AVEC https:// :');
     console.log('');
-    console.log('  (1re fois) installe le certificat sur l\'iPad :');
-    console.log('      fichier  iPad-certificat.crt');
+    if (ALL.length) {
+      console.log('      👉  https://' + IP + ':' + PORT + '   (à essayer en premier)');
+      if (ALL.length > 1) {
+        console.log('');
+        console.log('  Si ça ne marche pas, essaie une autre adresse de ce PC :');
+        for (const x of ALL.slice(1)) {
+          console.log('          https://' + x.addr + ':' + PORT + '   (' + x.name + ')');
+        }
+      }
+    } else {
+      console.log('      Aucune adresse réseau trouvée — vérifie le Wi-Fi du PC.');
+    }
+    console.log('');
+    console.log('  Rappels :');
+    console.log('   - iPad et PC sur le MÊME Wi-Fi.');
+    console.log('   - (1re fois) installe le certificat : fichier iPad-certificat.crt');
+    console.log('   - Laisse cette fenêtre OUVERTE.');
     console.log('=========================================================');
   });
