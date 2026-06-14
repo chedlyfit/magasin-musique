@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Musique Magasin">
+<title>Musique Magasin</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2a3340;
+    --txt:#e6edf3; --muted:#8b97a7; --accent:#3b82f6; --accent2:#2563eb;
+    --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow-x:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:18px 16px 40px;}
+  h1{font-size:20px; margin:0 0 2px; font-weight:700;}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:18px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:16px;}
+  .label{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:10px;}
+
+  /* Now playing */
+  .np-title{font-size:22px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .np-state{color:var(--muted); font-size:13px; margin-top:4px;}
+  .controls{display:flex; gap:12px; margin-top:16px;}
+  .btn{border:none; border-radius:14px; background:var(--panel2); color:var(--txt);
+       font-size:16px; font-weight:600; padding:16px; flex:1; cursor:pointer; transition:.12s;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--accent);}
+  .btn.primary:active{background:var(--accent2);}
+  .btn.wide{width:100%; flex:none;}
+  .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--muted); font-size:14px; padding:12px;}
+  .play-btn{font-size:30px; padding:20px;}
+
+  .vol-row{display:flex; align-items:center; gap:12px; margin-top:16px;}
+  .vol-row span{font-size:20px;}
+  input[type=range]{flex:1; height:34px; accent-color:var(--accent);}
+
+  /* Talk button */
+  .talk{
+    width:100%; border:none; border-radius:22px; padding:34px 18px;
+    background:linear-gradient(180deg,#ef4444,#dc2626); color:#fff;
+    font-size:24px; font-weight:800; letter-spacing:.02em; cursor:pointer;
+    box-shadow:0 8px 0 #991b1b; transition:transform .06s, box-shadow .06s;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+  }
+  .talk:active, .talk.on{transform:translateY(6px); box-shadow:0 2px 0 #991b1b;
+    background:linear-gradient(180deg,#22c55e,#16a34a);}
+  .talk.on{box-shadow:0 2px 0 #15803d;}
+  .talk .ico{font-size:30px;}
+  .talk-hint{text-align:center; color:var(--muted); font-size:13px; margin-top:10px;}
+
+  /* lists */
+  .item{display:flex; align-items:center; gap:10px; padding:12px 10px; border-bottom:1px solid var(--line); font-size:15px;}
+  .item:last-child{border-bottom:none;}
+  .item .name{flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .item .now{color:var(--green); font-size:12px; font-weight:700;}
+  .x{background:none; border:none; color:var(--muted); font-size:20px; padding:4px 8px; cursor:pointer;}
+  .empty{color:var(--muted); font-size:14px; text-align:center; padding:18px 0;}
+
+  /* announce form */
+  .row{display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;}
+  input[type=time]{background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:12px; font-size:18px;}
+  input[type=text], textarea{width:100%; background:var(--panel2); border:1px solid var(--line);
+    color:var(--txt); border-radius:10px; padding:12px; font-size:15px; font-family:inherit;}
+  textarea{min-height:60px; resize:vertical;}
+  .toggle{display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted);}
+
+  .badge{display:inline-block; background:var(--panel2); border:1px solid var(--line);
+    border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted);}
+  .footnote{color:var(--muted); font-size:12px; line-height:1.5; margin-top:8px;}
+  details summary{cursor:pointer; color:var(--muted); font-size:14px; padding:6px 0;}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎵 Musique Magasin</h1>
+  <div class="sub">Musique non-stop · Annonce automatique · Micro</div>
+
+  <!-- NOW PLAYING -->
+  <div class="card">
+    <div class="label">En lecture</div>
+    <div class="np-title" id="npTitle">— Aucune musique —</div>
+    <div class="np-state" id="npState">Ajoutez vos chansons ci-dessous pour commencer.</div>
+    <div class="controls">
+      <button class="btn" id="prevBtn">⏮</button>
+      <button class="btn primary play-btn" id="playBtn">▶</button>
+      <button class="btn" id="nextBtn">⏭</button>
+    </div>
+    <div class="vol-row">
+      <span>🔈</span>
+      <input type="range" id="vol" min="0" max="100" value="80">
+      <span>🔊</span>
+    </div>
+  </div>
+
+  <!-- TALK -->
+  <div class="card">
+    <div class="label">Micro — Annonce en direct</div>
+    <button class="talk" id="talkBtn"><span class="ico">🎤</span><span id="talkLabel">MAINTENIR POUR PARLER</span></button>
+    <div class="talk-hint">Garde le doigt appuyé pour parler. La musique baisse automatiquement.</div>
+  </div>
+
+  <!-- MUSIC LIBRARY -->
+  <div class="card">
+    <div class="label">Ma musique (<span id="trackCount">0</span>)</div>
+    <div id="trackList"><div class="empty">Aucune chanson. Touchez « Ajouter de la musique ».</div></div>
+    <input type="file" id="fileInput" accept="audio/*" multiple class="hidden">
+    <button class="btn wide primary" id="addBtn" style="margin-top:14px;">＋ Ajouter de la musique</button>
+    <div class="row" style="margin-top:12px;">
+      <label class="toggle"><input type="checkbox" id="shuffle" checked> Lecture aléatoire</label>
+    </div>
+    <div class="footnote">Vos fichiers restent enregistrés dans l'iPad (même après redémarrage) et jouent en boucle. Utilisez votre propre musique ou de la musique libre de droits.</div>
+  </div>
+
+  <!-- ANNOUNCEMENTS -->
+  <div class="card">
+    <div class="label">Annonces programmées</div>
+    <div id="annList"></div>
+    <details style="margin-top:8px;">
+      <summary>＋ Ajouter une annonce automatique</summary>
+      <div style="margin-top:12px;">
+        <div class="row">
+          <input type="time" id="annTime" value="20:45">
+        </div>
+        <textarea id="annText" placeholder="Texte de l'annonce…">Le magasin ferme dans 15 minutes. Profitez de nos liquidations avant la fermeture. Merci de votre visite !</textarea>
+        <button class="btn wide primary" id="annAdd" style="margin-top:10px;">Enregistrer l'annonce</button>
+      </div>
+    </details>
+    <button class="btn ghost wide" id="annTest" style="margin-top:12px;">🔊 Tester l'annonce</button>
+    <div class="footnote">À l'heure indiquée, la musique baisse, un carillon sonne, puis l'annonce est lue à voix haute automatiquement, chaque jour.</div>
+  </div>
+
+  <div style="text-align:center; margin-top:6px;">
+    <span class="badge" id="clock">--:--</span>
+  </div>
+</div>
+
+<audio id="player" preload="auto"></audio>
+
+<script>
+/* ---------- Petit stockage IndexedDB pour les fichiers audio ---------- */
+const DB_NAME='magasin-musique', STORE='tracks';
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,1);
+  r.onupgradeneeded=()=>{r.result.createObjectStore(STORE,{keyPath:'id'});};
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);});}
+async function dbAdd(rec){const db=await idb();return new Promise((res,rej)=>{
+  const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(rec);
+  t.oncomplete=res;t.onerror=()=>rej(t.error);});}
+async function dbAll(){const db=await idb();return new Promise((res,rej)=>{
+  const t=db.transaction(STORE,'readonly');const rq=t.objectStore(STORE).getAll();
+  rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});}
+async function dbDel(id){const db=await idb();return new Promise((res,rej)=>{
+  const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(id);
+  t.oncomplete=res;t.onerror=()=>rej(t.error);});}
+
+/* ---------- État ---------- */
+let tracks=[];           // {id,name,blob}
+let order=[];            // index de lecture
+let pos=0;               // position dans order
+let curUrl=null;
+let musicVol=0.8;
+let ducked=false;
+const player=document.getElementById('player');
+
+/* ---------- Lecture musique ---------- */
+function applyVol(){player.volume = ducked ? musicVol*0.12 : musicVol;}
+function setDucked(b){ducked=b; applyVol();}
+function buildOrder(){
+  order=tracks.map((_,i)=>i);
+  if(document.getElementById('shuffle').checked){
+    for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+  }
+}
+function loadCurrent(autoplay){
+  if(!tracks.length){updateNP();return;}
+  if(pos>=order.length){buildOrder();pos=0;}
+  const t=tracks[order[pos]];
+  if(curUrl && curUrl.indexOf('blob:')===0)URL.revokeObjectURL(curUrl);
+  curUrl = t.url ? t.url : URL.createObjectURL(t.blob);
+  player.src=curUrl;
+  applyVol();
+  if(autoplay)player.play().catch(()=>{});
+  updateNP();
+}
+function next(){pos++; if(pos>=order.length){buildOrder();pos=0;} loadCurrent(true);}
+function prev(){pos=Math.max(0,pos-1); loadCurrent(true);}
+player.addEventListener('ended',next);
+function updateNP(){
+  const t=tracks.length?tracks[order[pos]]:null;
+  document.getElementById('npTitle').textContent = t ? t.name.replace(/\.[^.]+$/,'') : '— Aucune musique —';
+  document.getElementById('npState').textContent =
+    !t ? 'Ajoutez vos chansons ci-dessous pour commencer.' :
+    (player.paused ? 'En pause' : 'Lecture en cours…');
+  document.getElementById('playBtn').textContent = (t && !player.paused) ? '⏸' : '▶';
+  renderTracks();
+}
+player.addEventListener('play',updateNP);
+player.addEventListener('pause',updateNP);
+
+document.getElementById('playBtn').onclick=()=>{
+  if(!tracks.length){document.getElementById('addBtn').click();return;}
+  if(player.paused){ if(!player.src)loadCurrent(false); player.play().catch(()=>{}); }
+  else player.pause();
+};
+document.getElementById('nextBtn').onclick=next;
+document.getElementById('prevBtn').onclick=prev;
+document.getElementById('vol').oninput=e=>{musicVol=e.target.value/100; applyVol();};
+document.getElementById('shuffle').onchange=()=>{buildOrder();pos=0;};
+
+/* ---------- Bibliothèque ---------- */
+document.getElementById('addBtn').onclick=()=>document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange=async e=>{
+  const files=[...e.target.files];
+  for(const f of files){
+    const id=(Date.now()+'-'+Math.random()).slice(0,18);
+    const rec={id,name:f.name,blob:f};
+    await dbAdd(rec); tracks.push(rec);
+  }
+  e.target.value='';
+  buildOrder();
+  if(!player.src) loadCurrent(false);
+  renderTracks();
+};
+function renderTracks(){
+  document.getElementById('trackCount').textContent=tracks.length;
+  const el=document.getElementById('trackList');
+  if(!tracks.length){el.innerHTML='<div class="empty">Aucune chanson. Déposez vos MP3 dans le dossier « music » du PC, ou touchez « Ajouter de la musique ».</div>';return;}
+  el.innerHTML='';
+  tracks.forEach((t,i)=>{
+    const isNow = tracks.length && order[pos]===i && !player.paused;
+    const d=document.createElement('div');d.className='item';
+    d.innerHTML=`<span class="name">${t.name.replace(/\.[^.]+$/,'')}</span>
+      ${isNow?'<span class="now">▶ en cours</span>':''}
+      ${t.server?'<span class="badge" style="padding:2px 8px">PC</span>':'<button class="x">✕</button>'}`;
+    d.querySelector('.name').onclick=()=>{const oi=order.indexOf(i); if(oi>=0){pos=oi;loadCurrent(true);}};
+    const xb=d.querySelector('.x');
+    if(xb)xb.onclick=async ev=>{
+      ev.stopPropagation();
+      await dbDel(t.id);
+      tracks=tracks.filter(x=>x.id!==t.id);
+      buildOrder(); if(pos>=order.length)pos=0;
+      renderTracks();
+    };
+    el.appendChild(d);
+  });
+}
+
+/* ---------- Micro (push-to-talk) ---------- */
+let audioCtx,micStream,micSource,micGain;
+async function ensureMic(){
+  if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')await audioCtx.resume();
+  if(!micStream){
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    micSource=audioCtx.createMediaStreamSource(micStream);
+    micGain=audioCtx.createGain(); micGain.gain.value=0;
+    micSource.connect(micGain); micGain.connect(audioCtx.destination);
+  }
+}
+const talkBtn=document.getElementById('talkBtn'), talkLabel=document.getElementById('talkLabel');
+let talking=false;
+async function startTalk(){
+  if(talking)return; talking=true;
+  talkBtn.classList.add('on'); talkLabel.textContent='EN DIRECT — PARLEZ';
+  try{ await ensureMic(); setDucked(true); micGain.gain.value=1.0; }
+  catch(err){ talking=false; talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
+    alert('Micro non autorisé. Ouvrez la page via un lien https et autorisez le micro dans Safari.'); }
+}
+function stopTalk(){
+  if(!talking)return; talking=false;
+  if(micGain)micGain.gain.value=0;
+  setDucked(false);
+  talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
+}
+talkBtn.addEventListener('pointerdown',e=>{e.preventDefault();startTalk();});
+talkBtn.addEventListener('pointerup',e=>{e.preventDefault();stopTalk();});
+talkBtn.addEventListener('pointercancel',stopTalk);
+talkBtn.addEventListener('pointerleave',stopTalk);
+
+/* ---------- Carillon + Synthèse vocale ---------- */
+function chime(){
+  return new Promise(res=>{
+    try{
+      const c=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+      audioCtx=c;
+      const notes=[[880,0],[660,.25]]; let done=0;
+      notes.forEach(([f,t])=>{
+        const o=c.createOscillator(),g=c.createGain();
+        o.frequency.value=f; o.type='sine';
+        o.connect(g); g.connect(c.destination);
+        const s=c.currentTime+t;
+        g.gain.setValueAtTime(0,s);
+        g.gain.linearRampToValueAtTime(.5,s+.03);
+        g.gain.exponentialRampToValueAtTime(.001,s+.45);
+        o.start(s); o.stop(s+.5);
+        o.onended=()=>{if(++done===notes.length)res();};
+      });
+      setTimeout(res,900);
+    }catch(e){res();}
+  });
+}
+function speak(text){
+  return new Promise(res=>{
+    try{
+      const u=new SpeechSynthesisUtterance(text);
+      u.lang='fr-FR'; u.rate=.98; u.pitch=1;
+      const v=speechSynthesis.getVoices().find(x=>/fr/i.test(x.lang));
+      if(v)u.voice=v;
+      u.onend=res; u.onerror=res;
+      speechSynthesis.speak(u);
+    }catch(e){res();}
+  });
+}
+async function announce(text){
+  const wasPlaying=!player.paused;
+  setDucked(true);
+  await chime();
+  await speak(text);
+  setDucked(false);
+  if(wasPlaying)player.play().catch(()=>{});
+}
+
+/* ---------- Annonces programmées ---------- */
+let announcements=JSON.parse(localStorage.getItem('cf_announcements')||'null')|| [
+  {time:'20:45', text:'Le magasin ferme dans 15 minutes. Profitez de nos liquidations avant la fermeture. Merci de votre visite !', on:true}
+];
+function saveAnn(){localStorage.setItem('cf_announcements',JSON.stringify(announcements));}
+function renderAnn(){
+  const el=document.getElementById('annList');
+  if(!announcements.length){el.innerHTML='<div class="empty">Aucune annonce programmée.</div>';return;}
+  el.innerHTML='';
+  announcements.forEach((a,i)=>{
+    const d=document.createElement('div');d.className='item';
+    d.innerHTML=`<label class="toggle"><input type="checkbox" ${a.on?'checked':''}></label>
+      <span class="name"><b>${a.time}</b> — ${a.text}</span>
+      <button class="x">✕</button>`;
+    d.querySelector('input').onchange=ev=>{a.on=ev.target.checked;saveAnn();};
+    d.querySelector('.x').onclick=()=>{announcements.splice(i,1);saveAnn();renderAnn();};
+    el.appendChild(d);
+  });
+}
+document.getElementById('annAdd').onclick=()=>{
+  const time=document.getElementById('annTime').value;
+  const text=document.getElementById('annText').value.trim();
+  if(!time||!text)return;
+  announcements.push({time,text,on:true}); saveAnn(); renderAnn();
+};
+document.getElementById('annTest').onclick=()=>{
+  const text=document.getElementById('annText').value.trim()||'Ceci est un test d\'annonce.';
+  announce(text);
+};
+let firedKeys=new Set();
+function checkSchedule(){
+  const now=new Date();
+  const key=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('clock').textContent=key;
+  announcements.forEach((a,i)=>{
+    const fk=now.toDateString()+'#'+i+'#'+a.time;
+    if(a.on && a.time===key && !firedKeys.has(fk)){
+      firedKeys.add(fk);
+      announce(a.text);
+    }
+  });
+  if(firedKeys.size>50)firedKeys.clear();
+}
+setInterval(checkSchedule,4000);
+// précharger les voix
+if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=()=>{};speechSynthesis.getVoices();}
+
+/* ---------- Démarrage ---------- */
+(async function init(){
+  let serverTracks=[], localTracks=[];
+  try{
+    const r=await fetch('/api/tracks',{cache:'no-store'});
+    if(r.ok){ serverTracks=(await r.json()).map((t,i)=>({id:'srv-'+i,name:t.name,url:t.url,server:true})); }
+  }catch(e){}
+  try{ localTracks=await dbAll(); }catch(e){ localTracks=[]; }
+  tracks=[...serverTracks, ...localTracks];
+  buildOrder();
+  if(tracks.length)loadCurrent(false);
+  renderTracks();
+  renderAnn();
+  checkSchedule();
+})();
+
+// éviter la mise en veille du son quand l'app passe en arrière-plan (au mieux)
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) applyVol(); });
+</script>
+</body>
+</html>

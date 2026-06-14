@@ -1,0 +1,8 @@
+Dépose tes fichiers musique (.mp3, .m4a, .wav...) DANS CE DOSSIER.
+
+Le serveur les détecte automatiquement et l'iPad les joue en boucle aléatoire,
+non-stop. Pas besoin de redémarrer : ajoute/enlève des fichiers quand tu veux.
+
+⚖️  Utilise ta propre musique ou de la musique libre de droits commerciale
+    (jouer de la musique en magasin demande des droits — Spotify/YouTube perso
+    sont interdits en commerce).

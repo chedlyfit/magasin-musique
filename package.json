@@ -1,0 +1,12 @@
+{
+  "name": "magasin-musique",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Musique non-stop + annonce automatique + micro, pour le magasin. Serveur local.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "selfsigned": "^2.4.1"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+cert.pem
+key.pem
+iPad-certificat.crt
+.cert-ip
+# Les fichiers musique restent en local sur le PC (pas sur GitHub)
+music/*
+!music/LISEZ-MOI.txt
