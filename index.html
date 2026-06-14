@@ -108,7 +108,7 @@
   <div class="card">
     <div class="label">Micro — Annonce en direct</div>
     <button class="talk" id="talkBtn"><span class="ico">🎤</span><span id="talkLabel">MAINTENIR POUR PARLER</span></button>
-    <div class="talk-hint">Garde le doigt appuyé pour parler. La musique baisse automatiquement.</div>
+    <div class="talk-hint" id="talkHint">Garde le doigt appuyé pour parler. La musique baisse automatiquement.</div>
   </div>
 
   <!-- MUSIC LIBRARY -->
@@ -275,7 +275,14 @@ async function startTalk(){
   talkBtn.classList.add('on'); talkLabel.textContent='EN DIRECT — PARLEZ';
   try{ await ensureMic(); setDucked(true); micGain.gain.value=1.0; }
   catch(err){ talking=false; talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
-    alert('Micro non autorisé. Ouvrez la page via un lien https et autorisez le micro dans Safari.'); }
+    const hint=document.getElementById('talkHint');
+    if(hint){
+      if(err&&err.name==='NotAllowedError'){ hint.innerHTML='⚠️ Micro refusé. Réglages → Safari → Microphone → Autoriser, puis recharge.'; }
+      else if(!window.isSecureContext||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ hint.innerHTML='⚠️ Page non sécurisée : active « Réglages de confiance des certificats » (voir guide).'; }
+      else { hint.innerHTML='⚠️ Micro indisponible ('+((err&&err.name)||err)+').'; }
+      hint.style.color='#ef4444';
+    }
+  }
 }
 function stopTalk(){
   if(!talking)return; talking=false;
@@ -377,6 +384,15 @@ setInterval(checkSchedule,4000);
 // précharger les voix
 if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=()=>{};speechSynthesis.getVoices();}
 
+/* ---------- Diagnostic micro ---------- */
+function checkMic(){
+  const hint=document.getElementById('talkHint'); if(!hint)return;
+  if(!window.isSecureContext || !(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+    hint.innerHTML='⚠️ Le micro est bloqué : la page n\'est pas « sécurisée ».<br>Active : Réglages → Général → Informations → <b>Réglages de confiance des certificats</b>.';
+    hint.style.color='#f59e0b';
+  }
+}
+
 /* ---------- Démarrage ---------- */
 (async function init(){
   let serverTracks=[], localTracks=[];
@@ -390,6 +406,7 @@ if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=()=>{};speechSyn
   if(tracks.length)loadCurrent(false);
   renderTracks();
   renderAnn();
+  checkMic();
   checkSchedule();
 })();
 
