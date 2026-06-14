@@ -9,15 +9,27 @@ const DIR = path.join(__dirname, 'music');
 if (!fs.existsSync(DIR)) fs.mkdirSync(DIR);
 const items = JSON.parse(fs.readFileSync(LIST, 'utf8'));
 
+// Attribution CC-BY écrite TOUT DE SUITE (obligatoire, même si interrompu)
+(function writeCredits() {
+  const lines = ['CRÉDITS MUSIQUE — Creative Commons BY 4.0',
+    'Musique : Kevin MacLeod (incompetech.com) — https://creativecommons.org/licenses/by/4.0/',
+    'Libre pour usage commercial (diffusion en magasin) avec ce crédit conservé.',
+    '='.repeat(60)];
+  for (const it of items) lines.push('- ' + it.filename.replace(/\.mp3$/i, '') + ' — Kevin MacLeod (incompetech.com) — CC BY 4.0');
+  try { fs.writeFileSync(path.join(DIR, 'CREDITS.txt'), lines.join('\n')); } catch (e) {}
+})();
+
 function get(url) {
   return new Promise((res, rej) => {
-    https.get(url, r => {
+    const req = https.get(url, r => {
       if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
         r.resume(); return get(r.headers.location).then(res, rej);
       }
       if (r.statusCode !== 200) { r.resume(); return rej(new Error('HTTP ' + r.statusCode)); }
       const chunks = []; r.on('data', c => chunks.push(c)); r.on('end', () => res(Buffer.concat(chunks)));
-    }).on('error', rej);
+    });
+    req.on('error', rej);
+    req.setTimeout(60000, () => req.destroy(new Error('timeout')));   // évite de bloquer si un fichier ne répond pas
   });
 }
 
@@ -37,13 +49,6 @@ function get(url) {
     } catch (e) { fail++; }
     process.stdout.write('\r[' + i + '/' + items.length + '] ok=' + ok + ' déjà=' + skip + ' échecs=' + fail + '   ');
   }
-  // Fichier d'attribution (obligatoire pour la licence CC-BY)
-  const lines = ['CRÉDITS MUSIQUE — Creative Commons BY 4.0',
-    'Musique : Kevin MacLeod (incompetech.com) — https://creativecommons.org/licenses/by/4.0/',
-    'Libre pour usage commercial (diffusion en magasin) avec ce crédit conservé.',
-    '='.repeat(60)];
-  for (const it of items) lines.push('- ' + it.filename.replace(/\.mp3$/i, '') + ' — Kevin MacLeod (incompetech.com) — CC BY 4.0');
-  fs.writeFileSync(path.join(DIR, 'CREDITS.txt'), lines.join('\n'));
   console.log('\n\nTerminé : ' + ok + ' téléchargés, ' + skip + ' déjà présents, ' + fail + ' échecs.');
   console.log('La musique est dans le dossier « music ». Recharge l\'app sur l\'iPad.');
 })();

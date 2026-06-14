@@ -36,20 +36,23 @@ automatique + micro « parler »** par-dessus la musique.
 
 ## B) Préparer l'iPad (une seule fois)
 
-Le micro de l'iPad n'est autorisé que sur une connexion sécurisée → il faut
-installer le **certificat** une fois.
+Le micro n'est autorisé que sur une connexion **sécurisée** → il faut installer
+le **certificat** une fois ET l'**approuver**.
 
-1. Sur le PC, prends le fichier **`iPad-certificat.crt`** (créé au 1er
-   démarrage) et envoie-le à l'iPad (AirDrop, courriel, clé USB…).
-2. Sur l'iPad : ouvre le fichier → **Réglages** affiche « Profil téléchargé » →
-   **Installer** (entre ton code).
-3. **Activer la confiance** : Réglages → **Général → Informations → Réglages
-   de confiance des certificats** → active l'interrupteur du certificat.
-4. Ouvre **Safari** et va à l'adresse affichée par le serveur
-   (ex. `https://192.168.2.17:8443`).
-5. Bouton **Partager → « Sur l'écran d'accueil »** → tu obtiens une icône comme
-   une vraie app.
-6. À la 1re utilisation du micro, Safari demande l'autorisation → **Autoriser**.
+> ⚠️ Si tu avais déjà installé un ANCIEN certificat, supprime-le d'abord :
+> Réglages → Général → **VPN et gestion de l'appareil** → touche l'ancien profil
+> → **Supprimer le profil**.
+
+1. Sur l'iPad, ouvre **Safari** à la **page d'installation** (en **http**, port
+   **8080**) : **`http://<ip-du-PC>:8080`** (l'adresse exacte est affichée par le
+   serveur au démarrage).
+2. Touche **« Télécharger le certificat »** → **Autoriser**.
+3. Réglages → en haut « **Profil téléchargé** » → **Installer** (entre ton code).
+4. ⭐ **ÉTAPE CLÉ** : Réglages → **Général → Informations** → tout en bas
+   **Réglages de confiance des certificats** → **active l'interrupteur**.
+5. Ouvre l'app (en **https**, port **8443**) : **`https://<ip-du-PC>:8443`**.
+6. Bouton **Partager → « Sur l'écran d'accueil »** → icône comme une vraie app.
+7. À la 1re utilisation du micro, Safari demande l'autorisation → **Autoriser**.
 
 ### Pour que la musique ne s'arrête jamais
 - iPad **branché au courant**.

@@ -138,7 +138,7 @@
       </div>
     </details>
     <button class="btn ghost wide" id="annTest" style="margin-top:12px;">🔊 Tester l'annonce</button>
-    <div class="footnote">À l'heure indiquée, la musique baisse, un carillon sonne, puis l'annonce est lue à voix haute automatiquement, chaque jour.</div>
+    <div class="footnote">À l'heure indiquée, la musique se met en pause, un carillon sonne, puis l'annonce est lue à voix haute automatiquement, chaque jour.</div>
   </div>
 
   <div style="text-align:center; margin-top:6px;">
@@ -171,7 +171,19 @@ let pos=0;               // position dans order
 let curUrl=null;
 let musicVol=0.8;
 let ducked=false;
+let wantPlaying=false;    // l'utilisateur veut-il que ça joue ? (relance après coupure iOS)
+let announcing=false;     // une annonce est en cours
+let audioCtx=null;        // micro + carillon (déverrouillé au 1er toucher)
+let ttsWarmed=false;
 const player=document.getElementById('player');
+
+/* ---------- Déverrouillage audio iOS (au 1er geste) ---------- */
+// iOS exige une interaction utilisateur pour autoriser le son (musique, carillon, voix).
+function unlockAudio(){
+  try{ if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended')audioCtx.resume(); }catch(e){}
+  if(!ttsWarmed){ ttsWarmed=true; try{ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); }catch(e){} }
+}
+document.addEventListener('pointerdown', unlockAudio);
 
 /* ---------- Volume musique (simple et fiable) ---------- */
 function applyVol(){ player.volume = Math.min(1, (ducked?0.12:1)*musicVol); }
@@ -193,9 +205,13 @@ function loadCurrent(autoplay){
   if(autoplay)player.play().catch(()=>{});
   updateNP();
 }
-function next(){pos++; if(pos>=order.length){buildOrder();pos=0;} loadCurrent(true);}
-function prev(){pos=Math.max(0,pos-1); loadCurrent(true);}
+function next(){wantPlaying=true; pos++; if(pos>=order.length){buildOrder();pos=0;} loadCurrent(true);}
+function prev(){wantPlaying=true; pos=Math.max(0,pos-1); loadCurrent(true);}
 player.addEventListener('ended',next);
+// Robustesse 12h : une chanson qui échoue/bloque ne doit pas arrêter la musique
+player.addEventListener('error',()=>{ if(tracks.length>1) setTimeout(next,1200); });
+player.addEventListener('stalled',()=>{ if(wantPlaying) player.play().catch(()=>{}); });
+player.addEventListener('waiting',()=>{ if(wantPlaying) player.play().catch(()=>{}); });
 function updateNP(){
   const t=tracks.length?tracks[order[pos]]:null;
   document.getElementById('npTitle').textContent = t ? t.name.replace(/\.[^.]+$/,'') : '— Aucune musique —';
@@ -203,6 +219,7 @@ function updateNP(){
     !t ? 'Ajoutez vos chansons ci-dessous pour commencer.' :
     (player.paused ? 'En pause' : 'Lecture en cours…');
   document.getElementById('playBtn').textContent = (t && !player.paused) ? '⏸' : '▶';
+  if('mediaSession' in navigator && t){ try{ navigator.mediaSession.metadata=new MediaMetadata({title:t.name.replace(/\.[^.]+$/,''), artist:'Musique Magasin'}); }catch(e){} }
   renderTracks();
 }
 player.addEventListener('play',updateNP);
@@ -210,19 +227,26 @@ player.addEventListener('pause',updateNP);
 
 document.getElementById('playBtn').onclick=()=>{
   if(!tracks.length){document.getElementById('addBtn').click();return;}
-  if(player.paused){ if(!player.src)loadCurrent(false); player.play().catch(()=>{}); }
-  else player.pause();
+  unlockAudio();
+  if(player.paused){ wantPlaying=true; if(!player.src)loadCurrent(false); player.play().catch(()=>{}); }
+  else { wantPlaying=false; player.pause(); }
 };
 document.getElementById('nextBtn').onclick=next;
 document.getElementById('prevBtn').onclick=prev;
 document.getElementById('vol').oninput=e=>{musicVol=e.target.value/100; applyVol();};
-document.getElementById('shuffle').onchange=()=>{buildOrder();pos=0;};
+document.getElementById('shuffle').onchange=()=>{
+  const cur = tracks.length?order[pos]:-1;   // garder le morceau en cours
+  buildOrder();
+  const ni = order.indexOf(cur);
+  pos = ni>=0?ni:0;
+};
 
 /* ---------- Bibliothèque ---------- */
 document.getElementById('addBtn').onclick=()=>document.getElementById('fileInput').click();
 document.getElementById('fileInput').onchange=async e=>{
   const files=[...e.target.files];
   for(const f of files){
+    if(tracks.some(t=>t.name===f.name)) continue;   // évite les doublons
     const id=(Date.now()+'-'+Math.random()).slice(0,18);
     const rec={id,name:f.name,blob:f};
     await dbAdd(rec); tracks.push(rec);
@@ -249,15 +273,16 @@ function renderTracks(){
       ev.stopPropagation();
       await dbDel(t.id);
       tracks=tracks.filter(x=>x.id!==t.id);
+      if(!tracks.length){ wantPlaying=false; player.pause(); player.removeAttribute('src'); }
       buildOrder(); if(pos>=order.length)pos=0;
-      renderTracks();
+      updateNP();
     };
     el.appendChild(d);
   });
 }
 
 /* ---------- Micro (push-to-talk) ---------- */
-let audioCtx,micStream,micSource,micGain;
+let micStream,micSource,micGain;
 async function ensureMic(){
   if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   if(audioCtx.state==='suspended')await audioCtx.resume();
@@ -278,7 +303,7 @@ async function startTalk(){
     const hint=document.getElementById('talkHint');
     if(hint){
       if(err&&err.name==='NotAllowedError'){ hint.innerHTML='⚠️ Micro refusé. Réglages → Safari → Microphone → Autoriser, puis recharge.'; }
-      else if(!window.isSecureContext||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ hint.innerHTML='⚠️ Page non sécurisée : active « Réglages de confiance des certificats » (voir guide).'; }
+      else if(!window.isSecureContext||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ hint.innerHTML='⚠️ Page non sécurisée : réinstalle le certificat (page http://(ip-du-PC):8080) + active « Réglages de confiance des certificats ».'; }
       else { hint.innerHTML='⚠️ Micro indisponible ('+((err&&err.name)||err)+').'; }
       hint.style.color='#ef4444';
     }
@@ -300,6 +325,7 @@ function chime(){
   return new Promise(res=>{
     try{
       if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      if(audioCtx.state==='suspended')audioCtx.resume();
       const c=audioCtx, dest=c.destination;
       const notes=[[880,0],[660,.25]]; let done=0;
       notes.forEach(([f,t])=>{
@@ -317,24 +343,34 @@ function chime(){
     }catch(e){res();}
   });
 }
+let frVoice=null;
+function loadVoices(){ try{ const vs=speechSynthesis.getVoices()||[]; frVoice=vs.find(x=>/^fr/i.test(x.lang))||frVoice; }catch(e){} }
+if('speechSynthesis' in window){ loadVoices(); try{ speechSynthesis.onvoiceschanged=loadVoices; }catch(e){} }
 function speak(text){
   return new Promise(res=>{
+    let done=false; const fin=()=>{ if(!done){done=true;res();} };
     try{
+      speechSynthesis.cancel();
       const u=new SpeechSynthesisUtterance(text);
       u.lang='fr-FR'; u.rate=.98; u.pitch=1; u.volume=1;
-      const v=speechSynthesis.getVoices().find(x=>/fr/i.test(x.lang));
-      if(v)u.voice=v;
-      u.onend=res; u.onerror=res;
+      if(frVoice)u.voice=frVoice;
+      u.onend=fin; u.onerror=fin;
+      speechSynthesis.resume();                 // contourne le gel du moteur TTS iOS
       speechSynthesis.speak(u);
-    }catch(e){res();}
+      setTimeout(fin, Math.max(6000, text.length*120));  // filet de sécurité
+    }catch(e){fin();}
   });
 }
 async function announce(text){
+  if(announcing)return; announcing=true;          // évite les chevauchements
   const wasPlaying=!player.paused;
-  if(wasPlaying)player.pause();          // musique en pause → voix bien plus forte
-  await chime();
-  await speak(text);
+  try{
+    if(wasPlaying)player.pause();                  // musique en pause → voix bien plus forte
+    await chime();
+    await speak(text);
+  }catch(e){}
   if(wasPlaying)player.play().catch(()=>{});
+  announcing=false;
 }
 
 /* ---------- Annonces programmées ---------- */
@@ -369,26 +405,34 @@ document.getElementById('annTest').onclick=()=>{
 let firedKeys=new Set();
 function checkSchedule(){
   const now=new Date();
-  const key=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  document.getElementById('clock').textContent=key;
-  announcements.forEach((a,i)=>{
-    const fk=now.toDateString()+'#'+i+'#'+a.time;
-    if(a.on && a.time===key && !firedKeys.has(fk)){
+  const today=now.toDateString();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  document.getElementById('clock').textContent=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  announcements.forEach(a=>{
+    if(!a.on || !a.time) return;
+    const parts=a.time.split(':'); const sched=(+parts[0])*60+(+parts[1]);
+    const fk=today+'#'+a.time+'#'+(a.text||'').slice(0,24);   // clé par date+heure+texte
+    if(nowMin>=sched && nowMin<=sched+2 && !firedKeys.has(fk)){   // fenêtre 2 min anti-rate
       firedKeys.add(fk);
       announce(a.text);
     }
   });
-  if(firedKeys.size>50)firedKeys.clear();
+  for(const k of firedKeys){ if(k.indexOf(today+'#')!==0) firedKeys.delete(k); }  // purge jours passés
 }
 setInterval(checkSchedule,4000);
-// précharger les voix
-if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=()=>{};speechSynthesis.getVoices();}
+
+/* ---------- Watchdog : garder la musique en marche (12h non-stop) ---------- */
+setInterval(()=>{
+  if(wantPlaying && !announcing && !talking && player.paused && tracks.length){
+    player.play().catch(()=>{});
+  }
+}, 8000);
 
 /* ---------- Diagnostic micro ---------- */
 function checkMic(){
   const hint=document.getElementById('talkHint'); if(!hint)return;
   if(!window.isSecureContext || !(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
-    hint.innerHTML='⚠️ Le micro est bloqué : la page n\'est pas « sécurisée ».<br>Active : Réglages → Général → Informations → <b>Réglages de confiance des certificats</b>.';
+    hint.innerHTML='⚠️ Micro bloqué : page non « sécurisée ». Réinstalle le certificat (ouvre <b>http://(ip-du-PC):8080</b>) PUIS active Réglages → Général → Informations → <b>Réglages de confiance des certificats</b>.';
     hint.style.color='#f59e0b';
   }
 }
@@ -410,8 +454,21 @@ function checkMic(){
   checkSchedule();
 })();
 
-// éviter la mise en veille du son quand l'app passe en arrière-plan (au mieux)
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) applyVol(); });
+// Au retour au 1er plan : relancer la musique si besoin ; couper le micro si on quitte
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ stopTalk(); }
+  else { applyVol(); if(wantPlaying && player.paused && tracks.length) player.play().catch(()=>{}); }
+});
+
+// Media Session : aide iOS à garder la lecture + boutons des écouteurs/voiture
+if('mediaSession' in navigator){
+  try{
+    navigator.mediaSession.setActionHandler('play',()=>{ wantPlaying=true; player.play().catch(()=>{}); });
+    navigator.mediaSession.setActionHandler('pause',()=>{ wantPlaying=false; player.pause(); });
+    navigator.mediaSession.setActionHandler('nexttrack',next);
+    navigator.mediaSession.setActionHandler('previoustrack',prev);
+  }catch(e){}
+}
 </script>
 </body>
 </html>
