@@ -41,17 +41,20 @@ const KEY = path.join(ROOT, 'key.pem');
 const CRT_IPAD = path.join(ROOT, 'iPad-certificat.crt');
 const IP_MARK = path.join(ROOT, '.cert-ip');
 
-function certExpiringSoon() {
+function certNeedsRegen() {
   try {
     const x = new crypto.X509Certificate(fs.readFileSync(CERT));
-    return (new Date(x.validTo).getTime() - Date.now()) < 30 * 24 * 3600 * 1000;
+    const days = (new Date(x.validTo).getTime() - new Date(x.validFrom).getTime()) / 86400000;
+    if (days > 825) return true;                                         // ancien cert trop long -> invalide iOS
+    if ((new Date(x.validTo).getTime() - Date.now()) < 30 * 86400000) return true; // expire bientôt
+    return false;
   } catch (e) { return true; }
 }
 function ensureCert() {
   const sig = ALL.map(x => x.addr).sort().join(',');
   const prev = fs.existsSync(IP_MARK) ? fs.readFileSync(IP_MARK, 'utf8').trim() : '';
   const have = fs.existsSync(CERT) && fs.existsSync(KEY);
-  if (have && prev === sig && !certExpiringSoon()) return false;   // OK, on réutilise
+  if (have && prev === sig && !certNeedsRegen()) return false;   // OK, on réutilise
 
   const selfsigned = require('selfsigned');
   const altNames = [
