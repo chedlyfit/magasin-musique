@@ -1,7 +1,7 @@
 # 🎵 Musique Magasin — Guide (100 % local, sur ton PC)
 
 Application pour le magasin : **musique non-stop + annonce de fermeture
-automatique + micro « parler »** par-dessus la musique.
+automatique**, et **annonces au micro** via une petite app dédiée.
 
 - Le **PC** (Windows) fait tourner le serveur et **contient la musique**.
 - L'**iPad** à la caisse ouvre l'interface par le **Wi-Fi du magasin** et sert
@@ -26,7 +26,7 @@ automatique + micro « parler »** par-dessus la musique.
    - La 1re fois, Windows demande d'**autoriser l'accès réseau** → clique
      **Autoriser**.
    - Une fenêtre noire s'ouvre et affiche l'adresse, par ex. :
-     `https://192.168.2.17:8443` → **laisse cette fenêtre ouverte** (c'est le
+     `http://192.168.2.17:8080` → **laisse cette fenêtre ouverte** (c'est le
      serveur).
 
 > 💡 Demande à ton fournisseur internet (ou règle dans le routeur) une **IP fixe
@@ -36,23 +36,17 @@ automatique + micro « parler »** par-dessus la musique.
 
 ## B) Préparer l'iPad (une seule fois)
 
-Le micro n'est autorisé que sur une connexion **sécurisée** → il faut installer
-le **certificat** une fois ET l'**approuver**.
+1. Sur l'iPad, ouvre **Safari** → tape l'adresse affichée par le serveur :
+   **`http://<ip-du-PC>:8080`** (ex. `http://192.168.2.17:8080`). La page
+   s'ouvre **directement** — aucun certificat, aucun avertissement.
+2. Bouton **Partager → « Sur l'écran d'accueil »** → icône comme une vraie app.
 
-> ⚠️ Si tu avais déjà installé un ANCIEN certificat, supprime-le d'abord :
-> Réglages → Général → **VPN et gestion de l'appareil** → touche l'ancien profil
-> → **Supprimer le profil**.
-
-1. Sur l'iPad, ouvre **Safari** à la **page d'installation** (en **http**, port
-   **8080**) : **`http://<ip-du-PC>:8080`** (l'adresse exacte est affichée par le
-   serveur au démarrage).
-2. Touche **« Télécharger le certificat »** → **Autoriser**.
-3. Réglages → en haut « **Profil téléchargé** » → **Installer** (entre ton code).
-4. ⭐ **ÉTAPE CLÉ** : Réglages → **Général → Informations** → tout en bas
-   **Réglages de confiance des certificats** → **active l'interrupteur**.
-5. Ouvre l'app (en **https**, port **8443**) : **`https://<ip-du-PC>:8443`**.
-6. Bouton **Partager → « Sur l'écran d'accueil »** → icône comme une vraie app.
-7. À la 1re utilisation du micro, Safari demande l'autorisation → **Autoriser**.
+### 🎤 Pour parler au micro
+Le micro **à l'intérieur d'une page web** est bloqué par Apple sur iPad. Pour les
+annonces en direct, installe l'app gratuite **« Good Mic »** (App Store) : tu
+l'ouvres, tu parles (la voix sort dans l'ampli), puis tu reviens sur l'app
+musique. *(L'annonce de fermeture programmée, elle, fonctionne dans l'app sans
+rien installer.)*
 
 ### Pour que la musique ne s'arrête jamais
 - iPad **branché au courant**.
@@ -67,8 +61,8 @@ le **certificat** une fois ET l'**approuver**.
 - ▶️ **Musique** : se lance toute seule, en boucle aléatoire.
   - Ajouter/enlever des chansons = glisse des `.mp3` dans le dossier `music` du
     PC, puis recharge la page sur l'iPad.
-- 🎤 **Parler** : garde le doigt appuyé sur le gros bouton rouge → la musique
-  baisse, tu parles, tu relâches.
+- 🎤 **Parler (annonce en direct)** : ouvre l'app **« Good Mic »**, parle, puis
+  reviens sur l'app musique.
 - 🕐 **Annonce de fermeture** : réglée à **20:45** par défaut. Change l'heure /
   le texte dans l'app, bouton « Tester l'annonce » pour l'entendre.
 
@@ -82,8 +76,8 @@ Larsen) quand tu parles.
 ---
 
 ## En cas de souci
-- **Le micro ne marche pas** : le certificat n'est pas « de confiance » (étape
-  B-3) ou la page n'est pas ouverte en `https://`.
+- **Parler au micro** : utilise l'app « Good Mic » (le micro dans la page n'est
+  pas disponible en local — limite imposée par Apple).
 - **L'iPad ne trouve pas l'adresse** : PC et iPad doivent être sur le **même
   Wi-Fi** ; la fenêtre noire du serveur doit rester ouverte.
 - **L'adresse a changé** : l'IP du PC a bougé → relance `DEMARRER-WINDOWS.bat`,

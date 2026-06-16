@@ -303,7 +303,7 @@ async function startTalk(){
     const hint=document.getElementById('talkHint');
     if(hint){
       if(err&&err.name==='NotAllowedError'){ hint.innerHTML='⚠️ Micro refusé. Réglages → Safari → Microphone → Autoriser, puis recharge.'; }
-      else if(!window.isSecureContext||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ hint.innerHTML='⚠️ Page non sécurisée : réinstalle le certificat (page http://(ip-du-PC):8080) + active « Réglages de confiance des certificats ».'; }
+      else if(!window.isSecureContext||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ hint.innerHTML='🎤 Pour parler au micro, ouvre l\'app gratuite <b>« Good Mic »</b> (App Store). Le micro intégré à la page n\'est pas disponible en local.'; }
       else { hint.innerHTML='⚠️ Micro indisponible ('+((err&&err.name)||err)+').'; }
       hint.style.color='#ef4444';
     }
@@ -432,7 +432,7 @@ setInterval(()=>{
 function checkMic(){
   const hint=document.getElementById('talkHint'); if(!hint)return;
   if(!window.isSecureContext || !(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
-    hint.innerHTML='⚠️ Micro bloqué : page non « sécurisée ». Réinstalle le certificat (ouvre <b>http://(ip-du-PC):8080</b>) PUIS active Réglages → Général → Informations → <b>Réglages de confiance des certificats</b>.';
+    hint.innerHTML='🎤 Pour parler au micro, ouvre l\'app gratuite <b>« Good Mic »</b> (App Store), puis reviens ici. Le micro intégré à la page n\'est pas disponible en local (limite Apple).';
     hint.style.color='#f59e0b';
   }
 }
