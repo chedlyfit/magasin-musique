@@ -440,10 +440,18 @@ function checkMic(){
 /* ---------- Démarrage ---------- */
 (async function init(){
   let serverTracks=[], localTracks=[];
+  // 1) musique servie par le PC (mode local)
   try{
     const r=await fetch('/api/tracks',{cache:'no-store'});
     if(r.ok){ serverTracks=(await r.json()).map((t,i)=>({id:'srv-'+i,name:t.name,url:t.url,server:true})); }
   }catch(e){}
+  // 2) sinon, playlist en streaming (mode hébergé / lien web)
+  if(!serverTracks.length){
+    try{
+      const r2=await fetch('musique-liste.json',{cache:'no-store'});
+      if(r2.ok){ serverTracks=(await r2.json()).map((t,i)=>({id:'web-'+i,name:t.filename,url:t.url,server:true})); }
+    }catch(e){}
+  }
   try{ localTracks=await dbAll(); }catch(e){ localTracks=[]; }
   tracks=[...serverTracks, ...localTracks];
   buildOrder();
