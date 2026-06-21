@@ -22,8 +22,20 @@ if not exist node_modules (
   call npm install
 )
 
+echo  Demarrage du serveur...
+start "Musique Magasin - serveur (NE PAS FERMER)" cmd /c "node server.js"
+timeout /t 3 /nobreak >nul
+
+echo  Ouverture de l'application dans le navigateur du PC...
+start "" http://localhost:8080
+
 echo.
-echo  Demarrage du serveur... laisse cette fenetre OUVERTE.
+echo  ==================================================
+echo   L'application s'ouvre dans le navigateur du PC.
+echo    - Plein ecran : touche  F11
+echo    - Pour PARLER : clique le gros bouton rouge et AUTORISE le micro
+echo    - Le son sort par l'audio du PC (branche ou Bluetooth vers l'ampli)
+echo   Laisse les deux fenetres ouvertes.
+echo  ==================================================
 echo.
-node server.js
 pause
