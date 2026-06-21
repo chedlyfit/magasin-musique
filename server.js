@@ -53,10 +53,16 @@ function serveFile(req, res, file) {
       let end = e ? parseInt(e, 10) : st.size - 1; if (isNaN(end)) end = st.size - 1;
       if (start >= st.size || start > end) { res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }); return res.end(); }
       res.writeHead(206, { 'Content-Type': type, 'Content-Range': `bytes ${start}-${end}/${st.size}`, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1 });
-      fs.createReadStream(file, { start, end }).pipe(res);
+      const rs = fs.createReadStream(file, { start, end });
+      rs.on('error', () => { try { res.destroy(); } catch (e) {} });
+      res.on('close', () => rs.destroy());   // le client a coupé/seek -> on stoppe la lecture du fichier
+      rs.pipe(res);
     } else {
       res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes' });
-      fs.createReadStream(file).pipe(res);
+      const rs = fs.createReadStream(file);
+      rs.on('error', () => { try { res.destroy(); } catch (e) {} });
+      res.on('close', () => rs.destroy());
+      rs.pipe(res);
     }
   });
 }
@@ -95,3 +101,6 @@ http.createServer(handler).listen(PORT, '0.0.0.0', () => {
   console.log('  - Pour parler au micro : app « Good Mic » (gratuite, App Store).');
   console.log('=========================================================');
 });
+
+// filet anti-crash : un EPIPE/erreur réseau ne doit PAS tuer le serveur (sinon toute la musique coupe)
+process.on('uncaughtException', (e) => { console.error('[non-fatal]', e && e.message); });

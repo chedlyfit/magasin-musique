@@ -224,7 +224,19 @@ function next(){wantPlaying=true; pos++; if(pos>=order.length){buildOrder();pos=
 function prev(){wantPlaying=true; pos=Math.max(0,pos-1); loadCurrent(true);}
 player.addEventListener('ended',next);
 // Robustesse 12h : une chanson qui échoue/bloque ne doit pas arrêter la musique
-player.addEventListener('error',()=>{ if(tracks.length>1) setTimeout(next,1200); });
+let errSkipTimer=null, netRetries=0;
+player.addEventListener('error',()=>{
+  const err=player.error; if(!err) return;
+  if(err.code===err.MEDIA_ERR_NETWORK && wantPlaying && netRetries<5){   // hoquet réseau : on REtente la même piste
+    netRetries++; clearTimeout(errSkipTimer);
+    errSkipTimer=setTimeout(()=>{ try{ player.load(); player.play().catch(()=>{}); }catch(e){} }, 800);
+    return;
+  }
+  if((err.code===err.MEDIA_ERR_DECODE || err.code===err.MEDIA_ERR_SRC_NOT_SUPPORTED) && tracks.length>1){
+    netRetries=0; clearTimeout(errSkipTimer); errSkipTimer=setTimeout(next,1200);  // piste illisible : on saute (une fois)
+  }
+});
+player.addEventListener('playing',()=>{ netRetries=0; });
 player.addEventListener('stalled',()=>{ if(wantPlaying) player.play().catch(()=>{}); });
 player.addEventListener('waiting',()=>{ if(wantPlaying) player.play().catch(()=>{}); });
 function updateNP(){
@@ -313,7 +325,7 @@ let talking=false;
 async function startTalk(){
   if(talking)return; talking=true;
   talkBtn.classList.add('on'); talkLabel.textContent='EN DIRECT — PARLEZ';
-  try{ await ensureMic(); setDucked(true); micGain.gain.value=1.0; }
+  try{ await ensureMic(); if(!talking){ if(micGain)micGain.gain.value=0; setDucked(false); return; } setDucked(true); micGain.gain.value=1.0; }
   catch(err){ talking=false; talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
     const hint=document.getElementById('talkHint');
     if(hint){
@@ -325,7 +337,7 @@ async function startTalk(){
   }
 }
 function stopTalk(){
-  if(!talking)return; talking=false;
+  talking=false;
   if(micGain)micGain.gain.value=0;
   setDucked(false);
   talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
@@ -363,15 +375,20 @@ function loadVoices(){ try{ const vs=speechSynthesis.getVoices()||[]; frVoice=vs
 if('speechSynthesis' in window){ loadVoices(); try{ speechSynthesis.onvoiceschanged=loadVoices; }catch(e){} }
 function speak(text){
   return new Promise(res=>{
-    let done=false; const fin=()=>{ if(!done){done=true;res();} };
+    let done=false, ka=null;
+    const fin=()=>{ if(done)return; done=true; if(ka){clearInterval(ka);ka=null;} res(); };
     try{
-      speechSynthesis.cancel();
+      if(!('speechSynthesis' in window)){ fin(); return; }
+      // vider la file SEULEMENT si quelque chose parle (évite la course cancel→speak de Chrome)
+      try{ if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel(); }catch(e){}
       const u=new SpeechSynthesisUtterance(text);
       u.lang='fr-FR'; u.rate=.98; u.pitch=1; u.volume=1;
       if(frVoice)u.voice=frVoice;
       u.onend=fin; u.onerror=fin;
-      speechSynthesis.resume();                 // contourne le gel du moteur TTS iOS
-      speechSynthesis.speak(u);
+      // keep-alive : dégèle le moteur vocal de Chrome/Edge sur les phrases longues
+      ka=setInterval(()=>{ try{ if(speechSynthesis.speaking){ speechSynthesis.pause(); speechSynthesis.resume(); } }catch(e){} }, 5000);
+      // laisser un tick entre cancel() et speak() = corrige la perte de voix sur Chrome/Edge
+      setTimeout(()=>{ if(done)return; try{ speechSynthesis.resume(); speechSynthesis.speak(u); }catch(e){ fin(); } }, 120);
       setTimeout(fin, Math.max(6000, text.length*120));  // filet de sécurité
     }catch(e){fin();}
   });
@@ -443,18 +460,18 @@ function checkSchedule(){
       announce(a.text);
     }
   });
-  // horaires automatiques de la musique (démarrage + arrêt) ; les annonces ci-dessus continuent quand même
-  if(musicSched.on){
+  // horaires automatiques de la musique — logique d'ÉTAT CONTINU (rattrapage + anti-coupure parasite)
+  // les annonces ci-dessus restent indépendantes et continuent même hors plage horaire
+  if(musicSched.on && tracks.length){
     const sp=musicSched.start.split(':'), ep=musicSched.stop.split(':');
     const sMin=(+sp[0])*60+(+sp[1]), eMin=(+ep[0])*60+(+ep[1]);
-    const fkS=today+'#mus-start#'+musicSched.start, fkE=today+'#mus-stop#'+musicSched.stop;
-    if(nowMin>=sMin && nowMin<=sMin+2 && !firedKeys.has(fkS)){
-      firedKeys.add(fkS);
-      if(tracks.length){ wantPlaying=true; if(!player.src)loadCurrent(false); player.play().catch(()=>{}); }
-    }
-    if(nowMin>=eMin && nowMin<=eMin+2 && !firedKeys.has(fkE)){
-      firedKeys.add(fkE);
-      wantPlaying=false; player.pause();
+    const shouldPlay = (sMin<=eMin) ? (nowMin>=sMin && nowMin<eMin) : (nowMin>=sMin || nowMin<eMin);  // gère minuit
+    if(shouldPlay){
+      wantPlaying=true;
+      if(!player.src) loadCurrent(false);
+      if(player.paused && !announcing && !talking) player.play().catch(()=>{});
+    } else {
+      if(wantPlaying || !player.paused){ wantPlaying=false; player.pause(); }
     }
   }
   for(const k of firedKeys){ if(k.indexOf(today+'#')!==0) firedKeys.delete(k); }  // purge jours passés
@@ -463,6 +480,8 @@ setInterval(checkSchedule,4000);
 
 /* ---------- Watchdog : garder la musique en marche (12h non-stop) ---------- */
 setInterval(()=>{
+  if(!talking && !announcing && ducked) setDucked(false);                       // débloque une musique restée étouffée
+  if(micGain && !talking && micGain.gain.value!==0) micGain.gain.value=0;        // coupe un micro resté ouvert
   if(wantPlaying && !announcing && !talking && player.paused && tracks.length){
     player.play().catch(()=>{});
   }
@@ -513,7 +532,7 @@ document.addEventListener('visibilitychange',()=>{
 if('mediaSession' in navigator){
   try{
     navigator.mediaSession.setActionHandler('play',()=>{ wantPlaying=true; player.play().catch(()=>{}); });
-    navigator.mediaSession.setActionHandler('pause',()=>{ wantPlaying=false; player.pause(); });
+    navigator.mediaSession.setActionHandler('pause',()=>{ player.pause(); checkSchedule(); });
     navigator.mediaSession.setActionHandler('nexttrack',next);
     navigator.mediaSession.setActionHandler('previoustrack',prev);
   }catch(e){}
