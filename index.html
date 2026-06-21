@@ -123,6 +123,21 @@
     <div class="footnote">Vos fichiers restent enregistrés dans l'iPad (même après redémarrage) et jouent en boucle. Utilisez votre propre musique ou de la musique libre de droits.</div>
   </div>
 
+  <!-- HORAIRES MUSIQUE -->
+  <div class="card">
+    <div class="label">Horaires automatiques de la musique</div>
+    <div class="row">
+      <span style="font-size:15px;">Démarrer à</span>
+      <input type="time" id="musStart" value="09:59">
+    </div>
+    <div class="row">
+      <span style="font-size:15px;">Arrêter à</span>
+      <input type="time" id="musStop" value="18:45">
+    </div>
+    <label class="toggle"><input type="checkbox" id="musSchedOn" checked> Activer les horaires automatiques</label>
+    <div class="footnote">La musique démarre et s'arrête toute seule à ces heures, chaque jour. Les annonces programmées, elles, continuent même après l'arrêt de la musique.</div>
+  </div>
+
   <!-- ANNOUNCEMENTS -->
   <div class="card">
     <div class="label">Annonces programmées</div>
@@ -402,6 +417,17 @@ document.getElementById('annTest').onclick=()=>{
   const text=document.getElementById('annText').value.trim()||'Ceci est un test d\'annonce.';
   announce(text);
 };
+/* ---------- Horaires automatiques de la musique ---------- */
+let musicSched=JSON.parse(localStorage.getItem('cf_musicsched')||'null')||{start:'09:59',stop:'18:45',on:true};
+function saveMusicSched(){localStorage.setItem('cf_musicsched',JSON.stringify(musicSched));}
+function wireMusicSched(){
+  const s=document.getElementById('musStart'),e=document.getElementById('musStop'),o=document.getElementById('musSchedOn');
+  if(!s)return;
+  s.value=musicSched.start; e.value=musicSched.stop; o.checked=musicSched.on;
+  s.onchange=()=>{musicSched.start=s.value;saveMusicSched();};
+  e.onchange=()=>{musicSched.stop=e.value;saveMusicSched();};
+  o.onchange=()=>{musicSched.on=o.checked;saveMusicSched();};
+}
 let firedKeys=new Set();
 function checkSchedule(){
   const now=new Date();
@@ -417,6 +443,20 @@ function checkSchedule(){
       announce(a.text);
     }
   });
+  // horaires automatiques de la musique (démarrage + arrêt) ; les annonces ci-dessus continuent quand même
+  if(musicSched.on){
+    const sp=musicSched.start.split(':'), ep=musicSched.stop.split(':');
+    const sMin=(+sp[0])*60+(+sp[1]), eMin=(+ep[0])*60+(+ep[1]);
+    const fkS=today+'#mus-start#'+musicSched.start, fkE=today+'#mus-stop#'+musicSched.stop;
+    if(nowMin>=sMin && nowMin<=sMin+2 && !firedKeys.has(fkS)){
+      firedKeys.add(fkS);
+      if(tracks.length){ wantPlaying=true; if(!player.src)loadCurrent(false); player.play().catch(()=>{}); }
+    }
+    if(nowMin>=eMin && nowMin<=eMin+2 && !firedKeys.has(fkE)){
+      firedKeys.add(fkE);
+      wantPlaying=false; player.pause();
+    }
+  }
   for(const k of firedKeys){ if(k.indexOf(today+'#')!==0) firedKeys.delete(k); }  // purge jours passés
 }
 setInterval(checkSchedule,4000);
@@ -458,6 +498,7 @@ function checkMic(){
   if(tracks.length)loadCurrent(false);
   renderTracks();
   renderAnn();
+  wireMusicSched();
   checkMic();
   checkSchedule();
 })();
