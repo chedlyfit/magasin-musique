@@ -201,7 +201,7 @@ function unlockAudio(){
 document.addEventListener('pointerdown', unlockAudio);
 
 /* ---------- Volume musique (simple et fiable) ---------- */
-function applyVol(){ player.volume = Math.min(1, (ducked?0.12:1)*musicVol); }
+function applyVol(){ player.volume = Math.min(1, (ducked?0.08:1)*musicVol); }
 function setDucked(b){ ducked=b; applyVol(); }
 function buildOrder(){
   order=tracks.map((_,i)=>i);
@@ -395,13 +395,14 @@ function speak(text){
 }
 async function announce(text){
   if(announcing)return; announcing=true;          // évite les chevauchements
-  const wasPlaying=!player.paused;
   try{
-    if(wasPlaying)player.pause();                  // musique en pause → voix bien plus forte
+    // On BAISSE la musique sans la couper : la voix domine ET la connexion Bluetooth
+    // reste active (couper la musique endort le Bluetooth et la voix se perd).
+    setDucked(true);
     await chime();
     await speak(text);
   }catch(e){}
-  if(wasPlaying)player.play().catch(()=>{});
+  setDucked(false);
   announcing=false;
 }
 
