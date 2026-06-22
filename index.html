@@ -436,7 +436,8 @@ document.getElementById('annTest').onclick=()=>{
 };
 /* ---------- Horaires automatiques de la musique ---------- */
 let musicSched=JSON.parse(localStorage.getItem('cf_musicsched')||'null')||{start:'09:59',stop:'18:45',on:true};
-function saveMusicSched(){localStorage.setItem('cf_musicsched',JSON.stringify(musicSched));}
+let lastSchedState=null;   // dernier état ouvert/fermé (pour n'agir qu'aux transitions)
+function saveMusicSched(){localStorage.setItem('cf_musicsched',JSON.stringify(musicSched)); lastSchedState=null;}
 function wireMusicSched(){
   const s=document.getElementById('musStart'),e=document.getElementById('musStop'),o=document.getElementById('musSchedOn');
   if(!s)return;
@@ -460,18 +461,17 @@ function checkSchedule(){
       announce(a.text);
     }
   });
-  // horaires automatiques de la musique — logique d'ÉTAT CONTINU (rattrapage + anti-coupure parasite)
-  // les annonces ci-dessus restent indépendantes et continuent même hors plage horaire
+  // horaires automatiques — agit UNIQUEMENT aux TRANSITIONS (ouverture/fermeture).
+  // Le reste du temps on laisse la lecture manuelle tranquille (sinon ça remet en pause hors
+  // des heures). Le watchdog maintient la lecture pendant les heures. Annonces = indépendantes.
   if(musicSched.on && tracks.length){
     const sp=musicSched.start.split(':'), ep=musicSched.stop.split(':');
     const sMin=(+sp[0])*60+(+sp[1]), eMin=(+ep[0])*60+(+ep[1]);
     const shouldPlay = (sMin<=eMin) ? (nowMin>=sMin && nowMin<eMin) : (nowMin>=sMin || nowMin<eMin);  // gère minuit
-    if(shouldPlay){
-      wantPlaying=true;
-      if(!player.src) loadCurrent(false);
-      if(player.paused && !announcing && !talking) player.play().catch(()=>{});
-    } else {
-      if(wantPlaying || !player.paused){ wantPlaying=false; player.pause(); }
+    if(shouldPlay!==lastSchedState){          // seulement quand on franchit une heure d'ouverture/fermeture
+      lastSchedState=shouldPlay;
+      if(shouldPlay){ wantPlaying=true; if(!player.src)loadCurrent(false); if(player.paused&&!announcing&&!talking)player.play().catch(()=>{}); }
+      else { wantPlaying=false; player.pause(); }
     }
   }
   for(const k of firedKeys){ if(k.indexOf(today+'#')!==0) firedKeys.delete(k); }  // purge jours passés
