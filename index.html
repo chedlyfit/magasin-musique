@@ -141,6 +141,13 @@
   <!-- ANNOUNCEMENTS -->
   <div class="card">
     <div class="label">Annonces programmées</div>
+    <div class="row" style="margin-bottom:8px;">
+      <span style="font-size:15px;">Voix</span>
+      <select id="annLangSel" style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:11px;font-size:15px;">
+        <option value="en-US">English</option>
+        <option value="fr-FR">Français</option>
+      </select>
+    </div>
     <div id="annList"></div>
     <details style="margin-top:8px;">
       <summary>＋ Ajouter une annonce automatique</summary>
@@ -148,12 +155,12 @@
         <div class="row">
           <input type="time" id="annTime" value="20:45">
         </div>
-        <textarea id="annText" placeholder="Texte de l'annonce…">Le magasin ferme dans 15 minutes. Profitez de nos liquidations avant la fermeture. Merci de votre visite !</textarea>
+        <textarea id="annText" placeholder="Texte de l'annonce…">The store is closing in 15 minutes. Take advantage of our liquidation deals before we close. Thank you and have a great day!</textarea>
         <button class="btn wide primary" id="annAdd" style="margin-top:10px;">Enregistrer l'annonce</button>
       </div>
     </details>
     <button class="btn ghost wide" id="annTest" style="margin-top:12px;">🔊 Tester l'annonce</button>
-    <div class="footnote">À l'heure indiquée, la musique se met en pause, un carillon sonne, puis l'annonce est lue à voix haute automatiquement, chaque jour.</div>
+    <div class="footnote">À l'heure indiquée, la musique baisse, un carillon sonne, puis l'annonce est lue à voix haute (langue choisie ci-dessus), chaque jour.</div>
   </div>
 
   <div style="text-align:center; margin-top:6px;">
@@ -370,8 +377,9 @@ function chime(){
     }catch(e){res();}
   });
 }
-let frVoice=null;
-function loadVoices(){ try{ const vs=speechSynthesis.getVoices()||[]; frVoice=vs.find(x=>/^fr/i.test(x.lang))||frVoice; }catch(e){} }
+let frVoice=null, enVoice=null;
+let annLang=localStorage.getItem('cf_annlang')||'en-US';   // langue de la voix des annonces (défaut: anglais)
+function loadVoices(){ try{ const vs=speechSynthesis.getVoices()||[]; frVoice=vs.find(x=>/^fr/i.test(x.lang))||frVoice; enVoice=vs.find(x=>/^en/i.test(x.lang))||enVoice; }catch(e){} }
 if('speechSynthesis' in window){ loadVoices(); try{ speechSynthesis.onvoiceschanged=loadVoices; }catch(e){} }
 function speak(text){
   return new Promise(res=>{
@@ -382,8 +390,9 @@ function speak(text){
       // vider la file SEULEMENT si quelque chose parle (évite la course cancel→speak de Chrome)
       try{ if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel(); }catch(e){}
       const u=new SpeechSynthesisUtterance(text);
-      u.lang='fr-FR'; u.rate=.98; u.pitch=1; u.volume=1;
-      if(frVoice)u.voice=frVoice;
+      u.lang=annLang; u.rate=.98; u.pitch=1; u.volume=1;
+      const v = annLang.indexOf('fr')===0 ? frVoice : enVoice;
+      if(v)u.voice=v;
       u.onend=fin; u.onerror=fin;
       // keep-alive : dégèle le moteur vocal de Chrome/Edge sur les phrases longues
       ka=setInterval(()=>{ try{ if(speechSynthesis.speaking){ speechSynthesis.pause(); speechSynthesis.resume(); } }catch(e){} }, 5000);
@@ -408,7 +417,7 @@ async function announce(text){
 
 /* ---------- Annonces programmées ---------- */
 let announcements=JSON.parse(localStorage.getItem('cf_announcements')||'null')|| [
-  {time:'20:45', text:'Le magasin ferme dans 15 minutes. Profitez de nos liquidations avant la fermeture. Merci de votre visite !', on:true}
+  {time:'20:45', text:'The store is closing in 15 minutes. Take advantage of our liquidation deals before we close. Thank you and have a great day!', on:true}
 ];
 function saveAnn(){localStorage.setItem('cf_announcements',JSON.stringify(announcements));}
 function renderAnn(){
@@ -432,9 +441,11 @@ document.getElementById('annAdd').onclick=()=>{
   announcements.push({time,text,on:true}); saveAnn(); renderAnn();
 };
 document.getElementById('annTest').onclick=()=>{
-  const text=document.getElementById('annText').value.trim()||'Ceci est un test d\'annonce.';
+  const text=document.getElementById('annText').value.trim()||(annLang.indexOf('fr')===0?'Ceci est un test d\'annonce.':'This is an announcement test.');
   announce(text);
 };
+// Sélecteur de langue de la voix des annonces (English / Français)
+(function(){ const sel=document.getElementById('annLangSel'); if(sel){ sel.value=annLang; sel.onchange=()=>{ annLang=sel.value; localStorage.setItem('cf_annlang',annLang); }; } })();
 /* ---------- Horaires automatiques de la musique ---------- */
 let musicSched=JSON.parse(localStorage.getItem('cf_musicsched')||'null')||{start:'09:59',stop:'18:45',on:true};
 let lastSchedState=null;   // dernier état ouvert/fermé (pour n'agir qu'aux transitions)
