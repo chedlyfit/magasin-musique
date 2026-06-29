@@ -68,7 +68,9 @@ function serveFile(req, res, file) {
 }
 
 const handler = (req, res) => {
-  let p = decodeURIComponent((req.url.split('?')[0]) || '/');
+  let p;
+  try { p = decodeURIComponent((req.url.split('?')[0]) || '/'); }
+  catch (e) { return send(res, 400, 'text/plain', 'Requête invalide'); }
   if (p === '/api/tracks') {
     let list = [];
     try {
@@ -85,7 +87,12 @@ const handler = (req, res) => {
   serveFile(req, res, file);
 };
 
-http.createServer(handler).listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(handler);
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') console.error('\n  ERREUR : le port ' + PORT + ' est déjà utilisé. Ferme l\'autre fenêtre du serveur (ou attends ~10 s), puis relance.\n');
+  else console.error('[serveur]', e && e.message);
+});
+server.listen(PORT, '0.0.0.0', () => {
   console.log('=========================================================');
   console.log('  🎵  Musique Magasin — serveur local démarré (sans certificat)');
   console.log('');

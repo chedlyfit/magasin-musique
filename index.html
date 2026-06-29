@@ -51,6 +51,7 @@
     font-size:24px; font-weight:800; letter-spacing:.02em; cursor:pointer;
     box-shadow:0 8px 0 #991b1b; transition:transform .06s, box-shadow .06s;
     display:flex; align-items:center; justify-content:center; gap:12px;
+    touch-action:none;
   }
   .talk:active, .talk.on{transform:translateY(6px); box-shadow:0 2px 0 #991b1b;
     background:linear-gradient(180deg,#22c55e,#16a34a);}
@@ -222,25 +223,29 @@ function loadCurrent(autoplay){
   const t=tracks[order[pos]];
   if(curUrl && curUrl.indexOf('blob:')===0)URL.revokeObjectURL(curUrl);
   curUrl = t.url ? t.url : URL.createObjectURL(t.blob);
-  player.src=curUrl;
+  player.src=curUrl; netRetries=0;
   applyVol();
   if(autoplay)player.play().catch(()=>{});
   updateNP();
 }
 function next(){wantPlaying=true; pos++; if(pos>=order.length){buildOrder();pos=0;} loadCurrent(true);}
-function prev(){wantPlaying=true; pos=Math.max(0,pos-1); loadCurrent(true);}
+function prev(){wantPlaying=true; if(pos<=0){pos=order.length-1;}else{pos--;} loadCurrent(true);}
 player.addEventListener('ended',next);
 // Robustesse 12h : une chanson qui échoue/bloque ne doit pas arrêter la musique
 let errSkipTimer=null, netRetries=0;
 player.addEventListener('error',()=>{
   const err=player.error; if(!err) return;
-  if(err.code===err.MEDIA_ERR_NETWORK && wantPlaying && netRetries<5){   // hoquet réseau : on REtente la même piste
-    netRetries++; clearTimeout(errSkipTimer);
-    errSkipTimer=setTimeout(()=>{ try{ player.load(); player.play().catch(()=>{}); }catch(e){} }, 800);
+  if(err.code===err.MEDIA_ERR_NETWORK && wantPlaying){
+    if(netRetries<5){ netRetries++; clearTimeout(errSkipTimer);    // hoquet réseau : on REtente la même piste
+      errSkipTimer=setTimeout(()=>{ try{ player.load(); player.play().catch(()=>{}); }catch(e){} }, 800); return; }
+    netRetries=0; clearTimeout(errSkipTimer);                       // trop d'échecs : on saute (ou recharge si 1 seule)
+    errSkipTimer=setTimeout(()=>{ if(tracks.length>1) next(); else { try{ player.load(); player.play().catch(()=>{}); }catch(e){} } }, 800);
     return;
   }
-  if((err.code===err.MEDIA_ERR_DECODE || err.code===err.MEDIA_ERR_SRC_NOT_SUPPORTED) && tracks.length>1){
-    netRetries=0; clearTimeout(errSkipTimer); errSkipTimer=setTimeout(next,1200);  // piste illisible : on saute (une fois)
+  if(err.code===err.MEDIA_ERR_DECODE || err.code===err.MEDIA_ERR_SRC_NOT_SUPPORTED){
+    netRetries=0; clearTimeout(errSkipTimer);
+    if(tracks.length>1){ errSkipTimer=setTimeout(next,1200); }                                           // piste illisible : on saute
+    else { errSkipTimer=setTimeout(()=>{ try{ player.load(); player.play().catch(()=>{}); }catch(e){} }, 2000); }  // 1 seule : on recharge
   }
 });
 player.addEventListener('playing',()=>{ netRetries=0; });
@@ -332,7 +337,7 @@ let talking=false;
 async function startTalk(){
   if(talking)return; talking=true;
   talkBtn.classList.add('on'); talkLabel.textContent='EN DIRECT — PARLEZ';
-  try{ await ensureMic(); if(!talking){ if(micGain)micGain.gain.value=0; setDucked(false); return; } setDucked(true); micGain.gain.value=1.0; }
+  try{ await ensureMic(); if(!talking){ if(micGain)micGain.gain.value=0; if(!announcing) setDucked(false); return; } setDucked(true); micGain.gain.value=1.0; }
   catch(err){ talking=false; talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
     const hint=document.getElementById('talkHint');
     if(hint){
@@ -346,13 +351,13 @@ async function startTalk(){
 function stopTalk(){
   talking=false;
   if(micGain)micGain.gain.value=0;
-  setDucked(false);
+  if(!announcing) setDucked(false);   // ne pas casser le ducking d'une annonce en cours
   talkBtn.classList.remove('on'); talkLabel.textContent='MAINTENIR POUR PARLER';
 }
-talkBtn.addEventListener('pointerdown',e=>{e.preventDefault();startTalk();});
-talkBtn.addEventListener('pointerup',e=>{e.preventDefault();stopTalk();});
+talkBtn.addEventListener('pointerdown',e=>{e.preventDefault(); try{talkBtn.setPointerCapture(e.pointerId);}catch(_){} startTalk();});
+talkBtn.addEventListener('pointerup',e=>{e.preventDefault(); try{talkBtn.releasePointerCapture(e.pointerId);}catch(_){} stopTalk();});
 talkBtn.addEventListener('pointercancel',stopTalk);
-talkBtn.addEventListener('pointerleave',stopTalk);
+// (pas de pointerleave : avec setPointerCapture le bouton garde le pointeur jusqu'au relâchement)
 
 /* ---------- Carillon + Synthèse vocale ---------- */
 function chime(){
@@ -449,7 +454,7 @@ document.getElementById('annTest').onclick=()=>{
 /* ---------- Horaires automatiques de la musique ---------- */
 let musicSched=JSON.parse(localStorage.getItem('cf_musicsched')||'null')||{start:'09:59',stop:'18:45',on:true};
 let lastSchedState=null;   // dernier état ouvert/fermé (pour n'agir qu'aux transitions)
-function saveMusicSched(){localStorage.setItem('cf_musicsched',JSON.stringify(musicSched)); lastSchedState=null;}
+function saveMusicSched(){localStorage.setItem('cf_musicsched',JSON.stringify(musicSched));}  // ne PAS reset lastSchedState (sinon éditer une heure coupe la lecture manuelle hors plage)
 function wireMusicSched(){
   const s=document.getElementById('musStart'),e=document.getElementById('musStop'),o=document.getElementById('musSchedOn');
   if(!s)return;
@@ -458,7 +463,8 @@ function wireMusicSched(){
   e.onchange=()=>{musicSched.stop=e.value;saveMusicSched();};
   o.onchange=()=>{musicSched.on=o.checked;saveMusicSched();};
 }
-let firedKeys=new Set();
+let firedKeys; try{ firedKeys=new Set(JSON.parse(localStorage.getItem('cf_firedkeys')||'[]')); }catch(e){ firedKeys=new Set(); }
+function saveFired(){ try{ localStorage.setItem('cf_firedkeys',JSON.stringify([...firedKeys])); }catch(e){} }
 function checkSchedule(){
   const now=new Date();
   const today=now.toDateString();
@@ -469,7 +475,7 @@ function checkSchedule(){
     const parts=a.time.split(':'); const sched=(+parts[0])*60+(+parts[1]);
     const fk=today+'#'+a.time+'#'+(a.text||'').slice(0,24);   // clé par date+heure+texte
     if(nowMin>=sched && nowMin<=sched+2 && !firedKeys.has(fk)){   // fenêtre 2 min anti-rate
-      firedKeys.add(fk);
+      firedKeys.add(fk); saveFired();
       announce(a.text);
     }
   });
@@ -479,14 +485,16 @@ function checkSchedule(){
   if(musicSched.on && tracks.length){
     const sp=musicSched.start.split(':'), ep=musicSched.stop.split(':');
     const sMin=(+sp[0])*60+(+sp[1]), eMin=(+ep[0])*60+(+ep[1]);
-    const shouldPlay = (sMin<=eMin) ? (nowMin>=sMin && nowMin<eMin) : (nowMin>=sMin || nowMin<eMin);  // gère minuit
+    const shouldPlay = (sMin===eMin) ? true : (sMin<eMin) ? (nowMin>=sMin && nowMin<eMin) : (nowMin>=sMin || nowMin<eMin);  // start===stop = 24h ; gère minuit
     if(shouldPlay!==lastSchedState){          // seulement quand on franchit une heure d'ouverture/fermeture
       lastSchedState=shouldPlay;
       if(shouldPlay){ wantPlaying=true; if(!player.src)loadCurrent(false); if(player.paused&&!announcing&&!talking)player.play().catch(()=>{}); }
       else { wantPlaying=false; player.pause(); }
     }
   }
-  for(const k of firedKeys){ if(k.indexOf(today+'#')!==0) firedKeys.delete(k); }  // purge jours passés
+  let _purged=false;
+  for(const k of firedKeys){ if(k.indexOf(today+'#')!==0){ firedKeys.delete(k); _purged=true; } }  // purge jours passés
+  if(_purged) saveFired();
 }
 setInterval(checkSchedule,4000);
 
